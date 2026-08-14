@@ -1,0 +1,19 @@
+# Configuração do Supabase CLI.
+# O project_id é o "reference" do projeto, usado por `supabase link`.
+project_id = "iklgnuqyhvkziagloqok"
+
+[db]
+# Versão do Postgres do projeto na nuvem. Só afeta o banco local do `supabase start`.
+major_version = 15
+
+[db.migrations]
+# Migrations aplicadas em ordem alfabética do nome do arquivo — por isso o
+# prefixo de timestamp. Arquivos fora do padrão <timestamp>_nome.sql são
+# silenciosamente ignorados pelo `db push`.
+schema_paths = []
+
+[auth]
+enable_signup = true
+# Confirmação de e-mail: mantenha ligada em produção.
+[auth.email]
+enable_confirmations = false
