@@ -4,7 +4,7 @@ import { CatalogAdmin } from '@/components/admin/catalog-admin';
 import { listCatalogVersions } from '@/lib/quote/catalog-repository';
 import { getSessionUser, getSupabaseServerClient } from '@/lib/supabase/server';
 
-export const metadata = { title: 'Catálogo — CutQuote' };
+export const metadata = { title: 'Catálogo — BELLARI' };
 
 export default async function AdminCatalogoPage() {
   const user = await getSessionUser();

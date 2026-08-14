@@ -1,4 +1,4 @@
-# CutQuote — motor de orçamento instantâneo para corte 2D
+# BELLARI — motor de orçamento instantâneo para corte 2D
 
 Aplicação web que lê um arquivo CAD (DXF ou SVG), mede a geometria, verifica as
 restrições de fabricação e devolve o preço de corte a laser / jato d'água /

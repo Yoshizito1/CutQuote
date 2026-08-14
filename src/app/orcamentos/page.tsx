@@ -4,7 +4,7 @@ import { Badge, Card, CardHeader } from '@/components/ui/primitives';
 import { listQuotes } from '@/lib/quote/persistence';
 import { getSessionUser, getSupabaseServerClient } from '@/lib/supabase/server';
 
-export const metadata = { title: 'Meus orçamentos — CutQuote' };
+export const metadata = { title: 'Meus orçamentos — BELLARI' };
 
 const STATUS_TONE = {
   rascunho: 'neutral',

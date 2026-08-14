@@ -5,7 +5,7 @@ import { loadSharedQuote } from '@/lib/quote/persistence';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { Badge, Card, CardHeader, Stat } from '@/components/ui/primitives';
 
-export const metadata = { title: 'Orçamento compartilhado — CutQuote' };
+export const metadata = { title: 'Orçamento compartilhado — BELLARI' };
 
 /**
  * Página pública de um orçamento compartilhado.

@@ -4,7 +4,7 @@ import { AuthForm } from '@/components/auth-form';
 import { supabaseConfigured } from '@/lib/supabase/config';
 import { getSessionUser } from '@/lib/supabase/server';
 
-export const metadata = { title: 'Entrar — CutQuote' };
+export const metadata = { title: 'Entrar — BELLARI' };
 
 export default async function EntrarPage() {
   if (!supabaseConfigured) {

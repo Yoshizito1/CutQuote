@@ -4,7 +4,7 @@ import { SavedQuoteView } from '@/components/quote/saved-quote-view';
 import { loadQuote } from '@/lib/quote/persistence';
 import { getSessionUser, getSupabaseServerClient } from '@/lib/supabase/server';
 
-export const metadata = { title: 'Orçamento — CutQuote' };
+export const metadata = { title: 'Orçamento — BELLARI' };
 
 export default async function OrcamentoPage({ params }: { params: Promise<{ id: string }> }) {
   // Next 16: params é uma Promise; acesso síncrono foi removido.

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BELLARI">
+  <!--
+    Ícone de aba. Retoma o bloco sólido que abre o logotipo BELLARI, em vez de
+    reduzir o logotipo inteiro — uma marca 2,5:1 fica ilegível a 16 px.
+  -->
+  <rect width="64" height="64" rx="12" fill="#081738" />
+  <rect x="12" y="22" width="30" height="20" rx="10" fill="#ffffff" />
+  <rect x="12" y="22" width="18" height="20" fill="#ffffff" />
+</svg>

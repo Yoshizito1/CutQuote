@@ -1,5 +1,5 @@
 -- =============================================================================
--- CutQuote - APLICAR TUDO
+-- BELLARI - APLICAR TUDO
 -- =============================================================================
 -- Cole este arquivo INTEIRO no SQL Editor do Supabase e clique em Run.
 -- Contem as 4 migrations na ordem correta. Rodar duas vezes e seguro.

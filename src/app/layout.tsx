@@ -13,7 +13,7 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'CutQuote — Orçamento instantâneo de corte a laser',
+  title: 'BELLARI — Orçamento instantâneo de corte a laser',
   description:
     'Envie um DXF ou SVG e receba na hora o preço de corte a laser, jato d’água e router CNC, com a memória de cálculo aberta e as restrições de fabricação verificadas.',
 };

@@ -60,7 +60,7 @@ export function exportDxf(polylines: readonly Polyline[], options: DxfExportOpti
   const maxX = allPoints.length > 0 ? Math.max(...allPoints.map((p) => p.x)) : 0;
   const maxY = allPoints.length > 0 ? Math.max(...allPoints.map((p) => p.y)) : 0;
 
-  out += pair(999, options.title ?? 'CutQuote');
+  out += pair(999, options.title ?? 'BELLARI');
   out += pair(0, 'SECTION') + pair(2, 'HEADER');
   out += pair(9, '$ACADVER') + pair(1, 'AC1009');
   out += pair(9, '$INSUNITS') + pair(70, 4); // 4 = milímetros
