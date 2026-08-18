@@ -207,23 +207,13 @@ export function linearHoles(
 }
 
 /**
- * Desenvolvimento de dobra (bend allowance).
+ * Desenvolvimento de dobra: reexportado da camada de geometria.
  *
- * Comprimento planificado = A + B − dedução de dobra, onde a dedução vem do
- * fator K, que descreve onde fica a linha neutra dentro da espessura. Sem isso
- * a peça sai maior que o projeto depois de dobrada.
+ * A conta mudou de casa quando o solver 3D passou a precisar dela — ter duas
+ * cópias do mesmo cálculo é como o plano e o preview começam a divergir. O
+ * reexport mantém funcionando quem já importava daqui.
  */
-export function bendDeduction(
-  thickness: number,
-  innerRadius: number,
-  angleDeg: number,
-  kFactor: number,
-): { allowance: number; deduction: number; setback: number } {
-  const angleRad = (angleDeg * Math.PI) / 180;
-  const allowance = angleRad * (innerRadius + kFactor * thickness);
-  const setback = (innerRadius + thickness) * Math.tan(angleRad / 2);
-  return { allowance, deduction: 2 * setback - allowance, setback };
-}
+export { bendDeduction, type BendAllowance } from '../geometry/bend-allowance';
 
 /** Move um anel. */
 export function translateRing(ring: readonly Point[], dx: number, dy: number): Point[] {
