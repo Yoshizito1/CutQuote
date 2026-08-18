@@ -12,7 +12,7 @@ import { quantityLadder, quotePart, volumeFactor } from '../src/lib/quote/pricin
 import type { PartConfig } from '../src/lib/quote/types';
 import { TEMPLATES } from '../src/lib/templates/catalog';
 import { runQualityCases } from './quality-cases';
-import { runFoldCases } from './fold-cases';
+import { runFoldCases, runPromotionCases } from './fold-cases';
 import { runTemplateSweep } from './template-sweep';
 import { exportDxf } from '../src/lib/templates/dxf-export';
 import { buildTemplateById, buildTemplateGeometry } from '../src/lib/templates';
@@ -705,6 +705,8 @@ runQualityCases({ check, checkTrue, section });
 runFoldCases({ check, checkTrue, section });
 
 runTemplateSweep({ checkTrue, section });
+
+runPromotionCases({ check, checkTrue, section });
 
 console.log(`\n${'='.repeat(60)}`);
 console.log(`${passed} verificações passaram, ${failed} falharam.`);

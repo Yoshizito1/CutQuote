@@ -11,7 +11,7 @@ import { applyToFlatPoint } from '../src/lib/geometry/fold/matrix';
 import { solveFold } from '../src/lib/geometry/fold/solver';
 import type { BendConfig, FoldedModel } from '../src/lib/geometry/fold/types';
 import type { Loop, Point } from '../src/lib/geometry/types';
-import { buildDxf, line, lwpolyline, rectangleAsLines } from './fixtures';
+import { buildDxf, line, lineWithLinetype, lwpolyline, rectangleAsLines } from './fixtures';
 
 export interface Harness {
   check: (name: string, actual: number, expected: number, tolerance: number) => void;
@@ -22,6 +22,7 @@ export interface Harness {
 const T = 2;
 const R = 2;
 const K = 0.44;
+const { allowance } = bendDeduction(T, R, 90, K);
 
 function config(axisId: string, angleDeg = 90, direction: 'up' | 'down' = 'up'): BendConfig {
   return { axisId, angleDeg, direction, innerRadius: R, kFactor: K };
@@ -84,7 +85,7 @@ function faceLengthAlongX(model: FoldedModel, faceId: number): number {
 }
 
 export function runFoldCases({ check, checkTrue, section }: Harness): void {
-  const { allowance, deduction } = bendDeduction(T, R, 90, K);
+  const { deduction } = bendDeduction(T, R, 90, K);
   const flat = 60 + 40 - deduction;
   const bendAt = 60 - deduction / 2;
 
@@ -285,6 +286,67 @@ export function runFoldCases({ check, checkTrue, section }: Harness): void {
       model.faces.filter((face) => face.holes.length === 1).length,
       2,
       0,
+    );
+  }
+}
+
+/**
+ * Casos que dependem de reclassificar entidades — a linha de construção
+ * promovida a eixo de dobra pela interface.
+ */
+export function runPromotionCases({ check, checkTrue, section }: Harness): void {
+  section('46. Linha de construção promovida a eixo dobra a peça');
+  {
+    // Reproduz PeçaTeste3.DXF: quadrado 60x60 contínuo + eixo CENTERX2 no meio.
+    const dxf = buildDxf([
+      ...lineWithLinetype(0, 30, 60, 30, 'CENTERX2'),
+      ...lineWithLinetype(0, 0, 60, 0, 'Continuous'),
+      ...lineWithLinetype(0, 0, 0, 60, 'Continuous'),
+      ...lineWithLinetype(0, 60, 60, 60, 'Continuous'),
+      ...lineWithLinetype(60, 0, 60, 60, 'Continuous'),
+    ]);
+    const geometry = analyzeDrawing(parseDxfFile(dxf), { bendLayers: ['DOBRA'], etchLayers: [] });
+    const outer = geometry.loops.filter((loop: Loop) => loop.depth % 2 === 0);
+    const outline = outer.find((loop) => loop.depth === 0)?.points ?? [];
+
+    check('nenhuma dobra automática', geometry.bendLines.length, 0, 0);
+    check('uma linha de construção', geometry.constructionLines.length, 1, 0);
+
+    // Sem promover: peça plana, e isso é resposta válida (não erro).
+    const plana = solveFold({ thickness: T, outline, holes: [], axes: [], configs: [] });
+    checkTrue('sem promoção: plana e válida', plana.ok && plana.faces.length === 1);
+
+    // Promovendo a linha de construção, exatamente como a interface faz.
+    const promovidos = geometry.constructionLines.map((line) => ({
+      points: line.points,
+      layer: line.layer,
+      length: 0,
+    }));
+    const extraction = extractAxes(promovidos, outer);
+    const usable = extraction.axes.filter((axis) => axis.problem === null);
+    check('eixo aceito após promoção', usable.length, 1, 0);
+
+    const dobrada = solveFold({
+      thickness: T,
+      outline,
+      holes: [],
+      axes: extraction.axes,
+      configs: usable.map((axis) => config(axis.id)),
+    });
+    checkTrue('dobra resolvida', dobrada.ok, dobrada.warnings.map((w) => w.title).join(' | '));
+    check('faces', dobrada.faces.length, 2, 0);
+    check('dobras', dobrada.patches.length, 1, 0);
+
+    // Conservação: as duas metades aparadas mais o arco dão o plano de 60 mm.
+    const alturas = dobrada.faces.map((face) => {
+      const ys = (face.outline as Point[]).map((p) => p.y);
+      return Math.max(...ys) - Math.min(...ys);
+    });
+    check(
+      'metade + arco + metade = 60 mm',
+      alturas[0] + allowance + alturas[1],
+      60,
+      0.001,
     );
   }
 }

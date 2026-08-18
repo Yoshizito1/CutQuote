@@ -1,5 +1,6 @@
 'use client';
 
+import type { Polyline } from '@/lib/geometry';
 import type { BendAxis, BendConfig, FoldWarning } from '@/lib/geometry/fold';
 import { Badge, Field, NumberInput, Select } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,9 @@ export function FoldPanel({
   warnings,
   thickness,
   defaultRadius,
+  constructionLines,
+  promoted,
+  onTogglePromoted,
   onChange,
   onFlatten,
   flattened,
@@ -29,6 +33,9 @@ export function FoldPanel({
   warnings: readonly FoldWarning[];
   thickness: number;
   defaultRadius: number;
+  constructionLines: readonly Polyline[];
+  promoted: readonly number[];
+  onTogglePromoted: (index: number) => void;
   onChange: (configs: BendConfig[]) => void;
   onFlatten: () => void;
   flattened: boolean;
@@ -43,11 +50,47 @@ export function FoldPanel({
 
   return (
     <div className="space-y-4 p-4">
-      {axes.length === 0 && (
+      {axes.length === 0 && constructionLines.length === 0 && (
         <p className="text-sm text-muted-foreground">
           Nenhuma linha de dobra encontrada. Desenhe os eixos num layer chamado{' '}
-          <code className="rounded bg-muted px-1 py-0.5">DOBRA</code> e reenvie o arquivo.
+          <code className="rounded bg-muted px-1 py-0.5">DOBRA</code> e reenvie o arquivo — ou use
+          um template de Cantoneira / Perfil U, que já vem com dobra.
         </p>
+      )}
+
+      {/*
+        Promoção de linha de construção a eixo.
+        Existe porque convenção de layer não é universal: quem desenhou o eixo
+        em traço-ponto no layer 0 ainda consegue ver a peça dobrada aqui, sem
+        voltar ao CAD só para renomear uma camada.
+      */}
+      {constructionLines.length > 0 && (
+        <div className="rounded-lg border border-border p-3">
+          <p className="mb-2 text-xs font-medium">Linhas de construção</p>
+          <ul className="space-y-1.5">
+            {constructionLines.map((line, index) => (
+              <li key={index}>
+                <label className="flex cursor-pointer items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={promoted.includes(index)}
+                    onChange={() => onTogglePromoted(index)}
+                    className="mt-0.5 size-3.5 shrink-0 accent-[var(--primary)]"
+                  />
+                  <span>
+                    Usar a linha <code className="rounded bg-muted px-1">{line.linetype}</code> como
+                    eixo de dobra
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Só afeta esta visualização — <strong className="font-medium">o preço não muda</strong>.
+            Para a dobra ser cobrada, mova a linha para um layer{' '}
+            <code className="rounded bg-muted px-1">DOBRA</code> no CAD.
+          </p>
+        </div>
       )}
 
       {usable.length > 0 && (
