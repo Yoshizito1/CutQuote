@@ -13,6 +13,7 @@ import type { PartConfig } from '../src/lib/quote/types';
 import { TEMPLATES } from '../src/lib/templates/catalog';
 import { runQualityCases } from './quality-cases';
 import { runFoldCases } from './fold-cases';
+import { runTemplateSweep } from './template-sweep';
 import { exportDxf } from '../src/lib/templates/dxf-export';
 import { buildTemplateById, buildTemplateGeometry } from '../src/lib/templates';
 import { bendDeduction } from '../src/lib/templates/shapes';
@@ -702,6 +703,8 @@ section('27. Continuous, SOLID e linetype vazio são corte');
 runQualityCases({ check, checkTrue, section });
 
 runFoldCases({ check, checkTrue, section });
+
+runTemplateSweep({ checkTrue, section });
 
 console.log(`\n${'='.repeat(60)}`);
 console.log(`${passed} verificações passaram, ${failed} falharam.`);

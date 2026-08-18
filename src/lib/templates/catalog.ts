@@ -86,6 +86,36 @@ const placaRetangular: PartTemplate = {
       if (recuo * 2 >= Math.min(largura, altura)) {
         return fail('O recuo é grande demais: os furos se sobrepõem no centro.');
       }
+      /*
+       * Folga do furo no canto arredondado.
+       *
+       * Quando o recuo é menor que o raio do canto, o furo já não está na
+       * região reta: ele fica na quina do arco, e a borda mais próxima passa a
+       * ser o próprio arco. O centro do arco está em (raio, raio), então a
+       * distância do furo até ele é √2·(raio − recuo), e o furo só cabe se essa
+       * distância mais o raio do furo não ultrapassar o raio do canto.
+       *
+       * O recuo ortogonal engana aqui: com raio 48 e recuo 12 ele parece
+       * confortável, mas o furo cai 15 mm FORA da peça.
+       */
+      if (recuo < raio) {
+        const ateCentroDoArco = Math.SQRT2 * (raio - recuo);
+        const folga = raio - (ateCentroDoArco + r);
+        if (folga < 0) {
+          const recuoMinimo = raio - (raio - r) / Math.SQRT2;
+          return fail(
+            `Com raio de canto ${raio} mm e furo de Ø${furoDiametro} mm, o furo ultrapassa ` +
+              `o canto arredondado em ${Math.abs(folga).toFixed(1)} mm. Use recuo de pelo ` +
+              `menos ${recuoMinimo.toFixed(1)} mm, ou reduza o raio dos cantos.`,
+          );
+        }
+        if (folga < r * 0.5) {
+          notes.push(
+            `Folga de apenas ${folga.toFixed(1)} mm entre o furo e o canto arredondado.`,
+          );
+        }
+      }
+
       polylines.push(
         ...rings([
           circleRing(recuo, recuo, r),
@@ -94,12 +124,6 @@ const placaRetangular: PartTemplate = {
           circleRing(recuo, altura - recuo, r),
         ]),
       );
-
-      // A distância do furo ao canto arredondado é menor que o recuo ortogonal.
-      const diagonal = Math.hypot(recuo - raio, recuo - raio);
-      if (raio > 0 && diagonal + r > raio) {
-        notes.push('Os furos ficam próximos do canto arredondado — confira a folga no preview.');
-      }
     }
     return ok(polylines, notes);
   },

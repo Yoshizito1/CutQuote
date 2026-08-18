@@ -69,6 +69,44 @@ export function buildTemplateGeometry(
     bendLayers: roles.bendLayers,
   });
 
+  /*
+   * Rede de segurança geométrica.
+   *
+   * Cada template valida os próprios parâmetros, mas essa validação é escrita à
+   * mão e sempre sobra uma combinação não prevista — foi assim que uma placa de
+   * raio 48 com recuo 12 chegou a gerar furos fora da peça.
+   *
+   * Aqui a checagem é sobre o RESULTADO, não sobre a entrada: se a geometria
+   * gerada se cruza ou se desmembra, ela é recusada, independentemente de qual
+   * template a produziu e de qual combinação chegou até aqui.
+   */
+  const structural: string[] = [];
+
+  if (geometry.quality.intersections > 0) {
+    structural.push(
+      'Estas medidas geram contornos que se cruzam — normalmente furos que ' +
+        'ultrapassam a borda da peça. Reduza o diâmetro dos furos, aumente o ' +
+        'recuo ou diminua o raio dos cantos.',
+    );
+  }
+  if (geometry.openChains.length > 0) {
+    structural.push('Estas medidas geram contorno aberto.');
+  }
+  if (geometry.bodyCount > 1) {
+    structural.push(
+      `Estas medidas partem a peça em ${geometry.bodyCount} pedaços soltos.`,
+    );
+  }
+
+  if (structural.length > 0) {
+    return {
+      geometry: null,
+      errors: structural,
+      notes: result.notes,
+      polylines: result.polylines,
+    };
+  }
+
   return {
     geometry,
     errors: [],
