@@ -350,7 +350,14 @@ export function QuoteWorkspace() {
                   <Stat
                     label="Área da peça"
                     value={`${formatNumber(selected.geometry.netArea / 100, 2)} cm²`}
-                    hint={`${(selectedEntry.quote.materialUtilization * 100).toFixed(0)}% de aproveitamento`}
+                    hint={
+                      // O fecho convexo mostra quanto da sobra vem do FORMATO da
+                      // peça, e não dos furos — é o que o cliente consegue mudar.
+                      selected.geometry.quality.hullArea > 0
+                        ? `${(selectedEntry.quote.materialUtilization * 100).toFixed(0)}% da chapa · ` +
+                          `${((selected.geometry.netArea / selected.geometry.quality.hullArea) * 100).toFixed(0)}% do contorno`
+                        : `${(selectedEntry.quote.materialUtilization * 100).toFixed(0)}% de aproveitamento`
+                    }
                   />
                   <Stat
                     label="Corte"

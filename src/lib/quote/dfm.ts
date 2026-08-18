@@ -6,7 +6,15 @@
  * do catálogo (razões sobre a espessura), não de constantes soltas.
  */
 
-import { minimumWebWidth, smallestHoleDimension, suspiciousScale, type PartGeometry } from '../geometry';
+import {
+  findSharpCorners,
+  findUncuttableLoops,
+  minimumHoleToBendDistance,
+  minimumWebWidth,
+  smallestHoleDimension,
+  suspiciousScale,
+  type PartGeometry,
+} from '../geometry';
 import { STATIC_CATALOG, findMaterial, findThickness, type Catalog } from './catalog';
 import type { DfmIssue, PartConfig } from './types';
 
@@ -39,6 +47,11 @@ export function validatePart(
   const process = catalog.processes[material.process];
 
   checkGeometryIntegrity(geometry, issues);
+  checkIntersections(geometry, issues);
+  checkDuplicates(geometry, issues);
+  checkUncuttableFeatures(geometry, process.kerf, issues);
+  checkSharpCorners(geometry, process.kerf, issues);
+  checkHoleToBend(geometry, thickness, issues);
   checkSize(geometry, process.sheet, issues);
   checkHoles(geometry, thickness.mm, thickness.minHoleRatio, issues);
   checkWebs(geometry, thickness.mm, thickness.minWebRatio, issues);
@@ -312,6 +325,131 @@ function checkServices(
       fix: 'Escolha um acabamento da lista disponível para este material.',
     });
   }
+}
+
+/**
+ * Contornos que se cruzam.
+ *
+ * Bloqueio, não aviso: um perfil que cruza a si mesmo não tem dentro e fora
+ * definidos. A área sai errada, o aninhamento sai errado, e a máquina não sabe
+ * de que lado deixar o material.
+ */
+function checkIntersections(geometry: PartGeometry, issues: DfmIssue[]): void {
+  const { intersections } = geometry.quality;
+  if (intersections === 0) return;
+
+  issues.push({
+    id: 'contorno-cruzado',
+    severity: 'bloqueio',
+    title: `${intersections} cruzamento(s) de contorno`,
+    detail:
+      'Há linhas de corte que se cruzam. Um contorno cruzado não define uma ' +
+      'região fechada: a área da peça e o lado do material ficam ambíguos.',
+    fix: 'Procure os pontos destacados em vermelho no desenho e apare (trim) as sobras nos cruzamentos.',
+  });
+}
+
+/**
+ * Geometria desenhada em duplicidade.
+ *
+ * Já foi descontada da medição — este aviso existe para o cliente entender por
+ * que o preço não bate com a contagem de entidades do CAD dele.
+ */
+function checkDuplicates(geometry: PartGeometry, issues: DfmIssue[]): void {
+  const { duplicateSegments, duplicateLength } = geometry.quality;
+  if (duplicateSegments === 0) return;
+
+  issues.push({
+    id: 'geometria-duplicada',
+    severity: 'atencao',
+    title: `${duplicateSegments} segmento(s) sobrepostos`,
+    detail:
+      `Foram encontrados ${duplicateLength.toFixed(1)} mm de traço desenhado mais de ` +
+      'uma vez. Já foram descontados do orçamento — a máquina corta uma vez só. ' +
+      'É comum em DXF gerado a partir de PDF ou em bloco explodido duas vezes.',
+    fix: 'No CAD, use "overkill"/"purgar duplicados" para limpar o desenho antes de exportar.',
+  });
+}
+
+/**
+ * Recortes menores que o feixe consegue abrir.
+ *
+ * Diferente do furo mínimo (que é função da espessura), este limite é físico:
+ * abaixo da largura de sangria não existe recorte, existe uma marca.
+ */
+function checkUncuttableFeatures(
+  geometry: PartGeometry,
+  kerf: number,
+  issues: DfmIssue[],
+): void {
+  const minimum = kerf * 2;
+  const tiny = findUncuttableLoops(geometry.loops, minimum);
+  if (tiny.length === 0) return;
+
+  const smallest = Math.min(...tiny.map((loop) => Math.min(loop.bbox.width, loop.bbox.height)));
+  issues.push({
+    id: 'recorte-minusculo',
+    severity: 'bloqueio',
+    title: `${tiny.length} recorte(s) menores que a sangria`,
+    detail:
+      `O menor recorte tem ${smallest.toFixed(3)} mm e a sangria do processo é ` +
+      `${kerf} mm. Abaixo de ${minimum.toFixed(2)} mm o feixe não abre o recorte, ` +
+      'apenas marca o material.',
+    fix: 'Aumente o recorte ou remova-o do desenho, se for resíduo de conversão.',
+  });
+}
+
+/**
+ * Cantos agudos demais.
+ *
+ * O feixe é redondo: um vértice mais fechado que o próprio feixe sai
+ * arredondado, e o calor concentrado na ponta queima a borda.
+ */
+function checkSharpCorners(geometry: PartGeometry, kerf: number, issues: DfmIssue[]): void {
+  // Arestas menores que 10x a sangria são discretização de curva, não canto.
+  const report = findSharpCorners(geometry.loops, 20, Math.max(kerf * 10, 1));
+  if (report.count === 0) return;
+
+  issues.push({
+    id: 'canto-agudo',
+    severity: 'atencao',
+    title: `${report.count} canto(s) muito agudo(s)`,
+    detail:
+      `O canto mais fechado tem ${report.smallestAngle.toFixed(0)}°. Abaixo de 20° o ` +
+      'feixe não reproduz a ponta: ela sai arredondada e a região concentra calor.',
+    fix: 'Adicione um pequeno raio na ponta ou abra o ângulo, se a função da peça permitir.',
+  });
+}
+
+/**
+ * Furo perto demais da linha de dobra.
+ *
+ * Na dobra o material escoa; um furo dentro dessa zona sai oval e puxa a aba
+ * para fora de esquadro. A régua usual é o raio interno mais duas espessuras.
+ */
+function checkHoleToBend(
+  geometry: PartGeometry,
+  thickness: { mm: number; bendRadius: number },
+  issues: DfmIssue[],
+): void {
+  if (geometry.bendLines.length === 0) return;
+
+  const measured = minimumHoleToBendDistance(geometry.loops, geometry.bendLines);
+  if (!Number.isFinite(measured)) return;
+
+  const minimum = thickness.bendRadius + thickness.mm * 2;
+  if (measured >= minimum) return;
+
+  issues.push({
+    id: 'furo-proximo-dobra',
+    severity: 'atencao',
+    title: 'Furo dentro da zona de deformação da dobra',
+    detail:
+      `O furo mais próximo está a ${measured.toFixed(1)} mm da linha de dobra, e o ` +
+      `recomendado para esta espessura é ${minimum.toFixed(1)} mm. O furo tende a ` +
+      'sair oval e a aba a perder o esquadro.',
+    fix: `Afaste o furo para pelo menos ${minimum.toFixed(1)} mm da dobra.`,
+  });
 }
 
 /**

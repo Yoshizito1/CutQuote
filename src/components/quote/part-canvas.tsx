@@ -198,6 +198,37 @@ export function PartCanvas({ geometry, className, showDimensions = true }: PartC
           </g>
         ))}
 
+        {/*
+          Cruzamentos de contorno. Marcados por último para ficarem por cima de
+          tudo: é o único achado que impede a peça de ser cortada de fato.
+        */}
+        {geometry.quality.intersectionSamples.map((point, index) => (
+          <g key={`cross-${index}`}>
+            <circle
+              cx={point.x}
+              cy={-point.y}
+              r={view.span * 0.02}
+              fill="var(--geo-open)"
+              fillOpacity={0.15}
+              stroke="var(--geo-open)"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+            />
+            <path
+              d={`M${point.x - view.span * 0.012} ${-point.y - view.span * 0.012}
+                  L${point.x + view.span * 0.012} ${-point.y + view.span * 0.012}
+                  M${point.x + view.span * 0.012} ${-point.y - view.span * 0.012}
+                  L${point.x - view.span * 0.012} ${-point.y + view.span * 0.012}`}
+              stroke="var(--geo-open)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            >
+              <title>Contorno cruzado — apare (trim) as sobras neste ponto</title>
+            </path>
+          </g>
+        ))}
+
         {showDimensions && geometry.bbox.width > 0 && (
           <Dimensions
             geometry={geometry}
@@ -319,6 +350,11 @@ export function CanvasLegend({ geometry }: { geometry: PartGeometry }) {
     { color: 'var(--geo-bend)', label: 'Dobra', show: geometry.bendLines.length > 0 },
     { color: 'var(--geo-etch)', label: 'Gravação', show: geometry.etchLength > 0 },
     { color: 'var(--geo-open)', label: 'Contorno aberto', show: geometry.openChains.length > 0 },
+    {
+      color: 'var(--geo-open)',
+      label: 'Cruzamento',
+      show: geometry.quality.intersections > 0,
+    },
     {
       color: 'var(--geo-construction)',
       label: 'Construção (não cobrada)',

@@ -15,6 +15,14 @@ export {
   DEFAULT_GAP_TOLERANCE,
 } from './analyze';
 export { DEFAULT_CHORD_TOLERANCE } from './curves';
+export {
+  convexHullArea,
+  findDuplicates,
+  findSelfIntersections,
+  findSharpCorners,
+  findUncuttableLoops,
+  minimumHoleToBendDistance,
+} from './quality';
 export { parseDxfFile } from './dxf';
 export { parseSvg } from './svg';
 

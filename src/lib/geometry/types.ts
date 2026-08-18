@@ -89,6 +89,20 @@ export interface BendLine {
   length: number;
 }
 
+/** Diagnóstico de qualidade do desenho, calculado junto com a medição. */
+export interface QualityReport {
+  /** Segmentos que apareciam mais de uma vez (já descontados do corte). */
+  duplicateSegments: number;
+  /** Comprimento que estaria sendo cobrado em duplicidade, em mm. */
+  duplicateLength: number;
+  /** Cruzamentos de contorno — geometria impossível de cortar. */
+  intersections: number;
+  /** Onde os cruzamentos acontecem, para destacar no desenho. */
+  intersectionSamples: Point[];
+  /** Área do fecho convexo, em mm² — indicador de aproveitamento de chapa. */
+  hullArea: number;
+}
+
 /** Resultado completo da análise de uma peça. */
 export interface PartGeometry {
   loops: Loop[];
@@ -119,6 +133,7 @@ export interface PartGeometry {
   holeCount: number;
   /** cutLength / bboxArea — proxy de densidade de desenho (mm/mm²). */
   density: number;
+  quality: QualityReport;
   source: ParsedDrawing;
 }
 

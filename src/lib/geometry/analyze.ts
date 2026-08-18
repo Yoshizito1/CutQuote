@@ -23,6 +23,12 @@ import {
   type Point,
   type Polyline,
 } from './types';
+import {
+  convexHullArea,
+  dropRedundant,
+  findDuplicates,
+  findSelfIntersections,
+} from './quality';
 
 export interface AnalyzeOptions {
   /**
@@ -109,9 +115,16 @@ export function analyzeDrawing(drawing: ParsedDrawing, options: AnalyzeOptions =
     }
   }
 
-  const { closedRings, openChains } = chainPolylines(cutPolylines, tolerance);
+  // Duplicidade é resolvida ANTES de medir. Um traço desenhado duas vezes é
+  // cortado uma vez pela máquina; cobrar duas seria erro de preço, não estética.
+  const duplicates = findDuplicates(cutPolylines, tolerance);
+  const deduped = dropRedundant(cutPolylines, duplicates.redundantPolylines);
+
+  const { closedRings, openChains } = chainPolylines(deduped, tolerance);
   const loops = buildLoops(closedRings);
   assignDepths(loops);
+
+  const intersections = findSelfIntersections(deduped, tolerance);
 
   const etchLength = etchPolylines.reduce(
     (total, polyline) => total + pathLength(polyline.points, polyline.closed),
@@ -169,6 +182,13 @@ export function analyzeDrawing(drawing: ParsedDrawing, options: AnalyzeOptions =
     bodyCount,
     holeCount,
     density: bboxArea > 0 ? cutLength / bboxArea : 0,
+    quality: {
+      duplicateSegments: duplicates.count,
+      duplicateLength: duplicates.length,
+      intersections: intersections.count,
+      intersectionSamples: intersections.samples,
+      hullArea: convexHullArea(loops.flatMap((loop) => loop.points)),
+    },
     source: drawing,
   };
 }
