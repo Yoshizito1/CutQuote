@@ -71,19 +71,37 @@ export interface FoldFace {
   transform: Mat4;
 }
 
-/** Trecho cilíndrico que substitui o material consumido pela dobra. */
+/**
+ * Trecho cilíndrico que substitui o material consumido pela dobra.
+ *
+ * Carrega tudo que a malha precisa para se construir sozinha, sem recalcular
+ * nada: quem monta o mesh importa Three.js e não pode depender do solver.
+ */
 export interface FoldPatch {
   axisId: string;
   angleDeg: number;
+  /** Raio da face interna, em mm. */
   innerRadius: number;
+  /** Raio da linha neutra, em mm. */
+  neutralRadius: number;
   /** Comprimento do arco no raio neutro, em mm. */
   allowance: number;
-  /** Largura da dobra ao longo do eixo, em mm. */
-  width: number;
-  /** Transformada da face de origem: o arco começa na borda aparada dela. */
-  transform: Mat4;
+
+  /** Reta suporte do eixo, no plano do flat. */
+  axisOrigin: Point;
+  axisDirection: Point;
+  /** Vetor unitário no plano, do eixo em direção à face filha. */
+  toChild: Point;
+  /** Trecho do eixo coberto pela peça, como parâmetro ao longo dele. */
+  spanStart: number;
+  spanEnd: number;
+
+  /** +1 dobra para cima (+z local), −1 para baixo. */
+  orientation: 1 | -1;
   /** Sentido da rotação, já resolvido em sinal. */
   sign: 1 | -1;
+  /** Transformada da face de origem: o arco nasce na borda aparada dela. */
+  transform: Mat4;
 }
 
 export type FoldSeverity = 'bloqueio' | 'atencao';

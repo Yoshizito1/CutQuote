@@ -11,7 +11,7 @@ import type { PartGeometry } from '@/lib/geometry';
 import { ConfigPanel } from './config-panel';
 import { DfmPanel } from './dfm-panel';
 import { Dropzone } from './dropzone';
-import { CanvasLegend, PartCanvas } from './part-canvas';
+import { PartPreview } from './part-preview';
 import { PartList, type PartListEntry } from './part-list';
 import { PriceBreakdown } from './price-breakdown';
 import { QuantityLadder } from './quantity-ladder';
@@ -329,12 +329,19 @@ export function QuoteWorkspace() {
                     )
                   }
                 />
-                <div className="aspect-[4/3] w-full bg-background p-4">
-                  <PartCanvas geometry={selected.geometry} />
-                </div>
-                <div className="border-t border-border px-4 py-3">
-                  <CanvasLegend geometry={selected.geometry} />
-                </div>
+                <PartPreview
+                  geometry={selected.geometry}
+                  thickness={selected.config.thicknessMm}
+                  defaultRadius={
+                    // Raio interno padrão da espessura escolhida. Cai na própria
+                    // espessura quando o catálogo não define — é a regra de bolso
+                    // da prensa (raio ≈ espessura).
+                    findMaterial(selected.config.materialId, catalog)
+                      ?.thicknesses.find(
+                        (option) => Math.abs(option.mm - selected.config.thicknessMm) < 1e-6,
+                      )?.bendRadius ?? selected.config.thicknessMm
+                  }
+                />
               </Card>
 
               <Card>

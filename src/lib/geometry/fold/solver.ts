@@ -198,17 +198,25 @@ export function solveFold(options: SolveOptions): FoldedModel {
         multiply(rotation, retreat),
       );
 
+      // Trecho do eixo efetivamente coberto pela peça. Fora da travessia não há
+      // material, então o arco não deve ser desenhado ali.
+      const spanStart = axis.crossings.length >= 2 ? axis.crossings[0] : 0;
+      const spanEnd = axis.crossings.length >= 2 ? axis.crossings[1] : axis.length;
+
       patches.push({
         axisId: axis.id,
         angleDeg: config.angleDeg,
         innerRadius: config.innerRadius,
+        neutralRadius,
         allowance,
-        width:
-          axis.crossings.length >= 2
-            ? Math.abs(axis.crossings[1] - axis.crossings[0])
-            : axis.length,
-        transform: transforms[current],
+        axisOrigin: axis.origin,
+        axisDirection: axis.direction,
+        toChild,
+        spanStart,
+        spanEnd,
+        orientation: orientation as 1 | -1,
         sign,
+        transform: transforms[current],
       });
 
       tree.push({ face: link.face, parent: current, axisId: link.axisId });
