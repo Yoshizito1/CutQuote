@@ -172,8 +172,10 @@ export function parseDxf(text: string, options: DxfParseOptions = {}): ParsedDra
     ignored: {},
     layers: new Set<string>(),
     blocks,
+    layerLinetypes: readLayerLinetypes(pairs),
     tol,
     depth: 0,
+    inheritedLinetype: '',
   };
 
   for (const entity of entities) {
@@ -246,6 +248,54 @@ function readSection(pairs: Pair[], name: string): RawEntity[] {
   return entities;
 }
 
+/**
+ * Mapa layer -> linetype, lido da tabela LAYER.
+ *
+ * É o que permite resolver `BYLAYER`, que é o valor PADRÃO do DXF: a maioria
+ * dos CAD não escreve o código 6 na entidade e deixa o linetype na camada.
+ * Sem esta tabela, um desenho com a linha de centro numa camada CENTER passaria
+ * batido pelo filtro e voltaria a ser cobrado como corte.
+ */
+function readLayerLinetypes(pairs: Pair[]): Map<string, string> {
+  const table = new Map<string, string>();
+  let inTables = false;
+  let current: { name: string | null; linetype: string | null } | null = null;
+
+  const flush = (): void => {
+    if (current?.name) table.set(current.name.toUpperCase(), current.linetype ?? 'CONTINUOUS');
+    current = null;
+  };
+
+  for (let i = 0; i < pairs.length; i += 1) {
+    const pair = pairs[i];
+
+    if (pair.code === 0 && pair.value === 'SECTION') {
+      const next = pairs[i + 1];
+      inTables = next?.code === 2 && next.value === 'TABLES';
+      continue;
+    }
+    if (pair.code === 0 && pair.value === 'ENDSEC') {
+      flush();
+      inTables = false;
+      continue;
+    }
+    if (!inTables) continue;
+
+    if (pair.code === 0) {
+      flush();
+      if (pair.value === 'LAYER') current = { name: null, linetype: null };
+      continue;
+    }
+    if (!current) continue;
+
+    // Dentro de uma entrada LAYER: 2 = nome da camada, 6 = linetype dela.
+    if (pair.code === 2 && current.name === null) current.name = pair.value;
+    else if (pair.code === 6 && current.linetype === null) current.linetype = pair.value;
+  }
+  flush();
+  return table;
+}
+
 /** Mapa nome-do-bloco -> entidades, já com o ponto-base subtraído. */
 function readBlocks(pairs: Pair[]): Map<string, { base: Point; entities: RawEntity[] }> {
   const flat = readSection(pairs, 'BLOCKS');
@@ -278,18 +328,47 @@ interface EmitContext {
   ignored: Record<string, number>;
   layers: Set<string>;
   blocks: Map<string, { base: Point; entities: RawEntity[] }>;
+  layerLinetypes: Map<string, string>;
   tol: number;
   depth: number;
+  /** Linetype do INSERT que está sendo expandido, para resolver BYBLOCK. */
+  inheritedLinetype: string;
 }
 
-function push(context: EmitContext, points: Point[], closed: boolean, layer: string): void {
+function push(
+  context: EmitContext,
+  points: Point[],
+  closed: boolean,
+  layer: string,
+  linetype: string,
+): void {
   if (points.length < 2) return;
   context.layers.add(layer);
-  context.polylines.push({ points, closed, layer });
+  context.polylines.push({ points, closed, layer, linetype });
+}
+
+/**
+ * Resolve o linetype efetivo de uma entidade.
+ *
+ * Ordem de herança do DXF: valor explícito na entidade > BYLAYER (linetype da
+ * camada) > BYBLOCK (linetype do INSERT que a contém) > Continuous.
+ */
+function resolveLinetype(entity: RawEntity, layer: string, context: EmitContext): string {
+  const raw = str(entity, 6, '').trim();
+  const upper = raw.toUpperCase();
+
+  if (raw === '' || upper === 'BYLAYER') {
+    return context.layerLinetypes.get(layer.toUpperCase()) ?? 'CONTINUOUS';
+  }
+  if (upper === 'BYBLOCK') {
+    return context.inheritedLinetype || 'CONTINUOUS';
+  }
+  return raw;
 }
 
 function emitEntity(entity: RawEntity, transform: Transform, context: EmitContext): void {
   const layer = str(entity, 8, '0');
+  const linetype = resolveLinetype(entity, layer, context);
   const map = (points: Point[]): Point[] => points.map((p) => applyTransform(p, transform));
   // A tolerância vale no espaço do bloco; ao inserir escalado, compensa.
   const localTol = context.tol / Math.max(1e-6, Math.abs(transform.scaleX));
@@ -298,14 +377,14 @@ function emitEntity(entity: RawEntity, transform: Transform, context: EmitContex
     case 'LINE': {
       const a: Point = { x: num(entity, 10), y: num(entity, 20) };
       const b: Point = { x: num(entity, 11), y: num(entity, 21) };
-      push(context, map([a, b]), false, layer);
+      push(context, map([a, b]), false, layer, linetype);
       break;
     }
 
     case 'CIRCLE': {
       const center: Point = { x: num(entity, 10), y: num(entity, 20) };
       const radius = num(entity, 40);
-      if (radius > 0) push(context, map(flattenCircle(center, radius, localTol)), true, layer);
+      if (radius > 0) push(context, map(flattenCircle(center, radius, localTol)), true, layer, linetype);
       break;
     }
 
@@ -314,13 +393,13 @@ function emitEntity(entity: RawEntity, transform: Transform, context: EmitContex
       const radius = num(entity, 40);
       const start = (num(entity, 50) * Math.PI) / 180;
       const end = (num(entity, 51) * Math.PI) / 180;
-      if (radius > 0) push(context, map(flattenArc(center, radius, start, end, localTol)), false, layer);
+      if (radius > 0) push(context, map(flattenArc(center, radius, start, end, localTol)), false, layer, linetype);
       break;
     }
 
     case 'LWPOLYLINE': {
       const result = buildPolylineWithBulges(collectLwVertices(entity), num(entity, 70) & 1, localTol);
-      push(context, map(result.points), result.closed, layer);
+      push(context, map(result.points), result.closed, layer, linetype);
       break;
     }
 
@@ -343,7 +422,7 @@ function emitEntity(entity: RawEntity, transform: Transform, context: EmitContex
       const startParam = num(entity, 41, 0);
       const endParam = num(entity, 42, Math.PI * 2);
       const result = flattenEllipse(center, majorAxis, ratio, startParam, endParam, localTol);
-      push(context, map(result.points), result.closed, layer);
+      push(context, map(result.points), result.closed, layer, linetype);
       break;
     }
 
@@ -365,10 +444,10 @@ function emitEntity(entity: RawEntity, transform: Transform, context: EmitContex
           localTol,
           closed,
         );
-        push(context, map(points), closed, layer);
+        push(context, map(points), closed, layer, linetype);
       } else if (fitPoints.length >= 2) {
         // Sem pontos de controle, os pontos de ajuste são a melhor aproximação.
-        push(context, map(fitPoints), closed, layer);
+        push(context, map(fitPoints), closed, layer, linetype);
       }
       break;
     }
@@ -398,6 +477,10 @@ function emitEntity(entity: RawEntity, transform: Transform, context: EmitContex
       const rowSpacing = num(entity, 45, 0);
 
       context.depth += 1;
+      // Entidades BYBLOCK dentro do bloco herdam o linetype deste INSERT.
+      const previousInherited = context.inheritedLinetype;
+      context.inheritedLinetype = linetype;
+
       for (let c = 0; c < columns; c += 1) {
         for (let r = 0; r < rows; r += 1) {
           const instance: Transform = {
@@ -417,6 +500,7 @@ function emitEntity(entity: RawEntity, transform: Transform, context: EmitContex
           }
         }
       }
+      context.inheritedLinetype = previousInherited;
       context.depth -= 1;
       break;
     }
@@ -493,7 +577,12 @@ function buildPolylineWithBulges(
 export function parseDxfFile(text: string, options: DxfParseOptions = {}): ParsedDrawing {
   const tol = options.chordTolerance ?? DEFAULT_CHORD_TOLERANCE;
   const base = parseDxf(text, options);
-  const legacy = parseLegacyPolylines(text, tol, base.unitScale);
+  const legacy = parseLegacyPolylines(
+    text,
+    tol,
+    base.unitScale,
+    readLayerLinetypes(tokenize(text)),
+  );
 
   if (legacy.length === 0) return base;
 
@@ -513,11 +602,21 @@ export function parseDxfFile(text: string, options: DxfParseOptions = {}): Parse
   };
 }
 
-function parseLegacyPolylines(text: string, tol: number, unitScale: number): Polyline[] {
+function parseLegacyPolylines(
+  text: string,
+  tol: number,
+  unitScale: number,
+  layerLinetypes: Map<string, string>,
+): Polyline[] {
   const pairs = tokenize(text);
   const results: Polyline[] = [];
 
-  let active: { flags: number; layer: string; vertices: BulgeVertex[] } | null = null;
+  let active: {
+    flags: number;
+    layer: string;
+    linetype: string;
+    vertices: BulgeVertex[];
+  } | null = null;
   let currentEntity: RawEntity | null = null;
 
   const flush = (): void => {
@@ -529,6 +628,7 @@ function parseLegacyPolylines(text: string, tol: number, unitScale: number): Pol
         points: built.points.map((p) => ({ x: p.x * unitScale, y: p.y * unitScale })),
         closed: built.closed,
         layer: active.layer,
+        linetype: active.linetype,
       });
     }
     active = null;
@@ -543,9 +643,16 @@ function parseLegacyPolylines(text: string, tol: number, unitScale: number): Pol
 
     // Fecha a entidade anterior antes de abrir a próxima.
     if (currentEntity?.type === 'POLYLINE') {
+      const layer = str(currentEntity, 8, '0');
+      const declared = str(currentEntity, 6, '').trim();
+      const isInherited = declared === '' || declared.toUpperCase() === 'BYLAYER';
+
       active = {
         flags: num(currentEntity, 70),
-        layer: str(currentEntity, 8, '0'),
+        layer,
+        linetype: isInherited
+          ? (layerLinetypes.get(layer.toUpperCase()) ?? 'CONTINUOUS')
+          : declared,
         vertices: [],
       };
     } else if (currentEntity?.type === 'VERTEX' && active) {

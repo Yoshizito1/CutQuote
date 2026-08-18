@@ -162,3 +162,65 @@ export function legacyPolyline(vertices: LwVertex[], closed: boolean, layer = '0
   pairs.push({ code: 0, value: 'SEQEND' });
   return pairs;
 }
+
+/** LINE com linetype explícito (código 6). */
+export function lineWithLinetype(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  linetype: string,
+  layer = '0',
+): Pair[] {
+  return [
+    { code: 0, value: 'LINE' },
+    { code: 8, value: layer },
+    { code: 6, value: linetype },
+    { code: 10, value: x1 },
+    { code: 20, value: y1 },
+    { code: 11, value: x2 },
+    { code: 21, value: y2 },
+  ];
+}
+
+/**
+ * DXF com tabela LAYER declarando o linetype de cada camada.
+ *
+ * Reproduz o caso mais comum de CAD real: a entidade não declara linetype
+ * (ou diz BYLAYER) e o valor efetivo vem da camada.
+ */
+export function buildDxfWithLayerTable(
+  layers: readonly { name: string; linetype: string }[],
+  entities: Pair[],
+): string {
+  const pairs: Pair[] = [
+    { code: 0, value: 'SECTION' },
+    { code: 2, value: 'HEADER' },
+    { code: 9, value: '$INSUNITS' },
+    { code: 70, value: 4 },
+    { code: 0, value: 'ENDSEC' },
+
+    { code: 0, value: 'SECTION' },
+    { code: 2, value: 'TABLES' },
+    { code: 0, value: 'TABLE' },
+    { code: 2, value: 'LAYER' },
+    { code: 70, value: layers.length },
+  ];
+  for (const layer of layers) {
+    pairs.push({ code: 0, value: 'LAYER' });
+    pairs.push({ code: 2, value: layer.name });
+    pairs.push({ code: 70, value: 0 });
+    pairs.push({ code: 62, value: 7 });
+    pairs.push({ code: 6, value: layer.linetype });
+  }
+  pairs.push({ code: 0, value: 'ENDTAB' });
+  pairs.push({ code: 0, value: 'ENDSEC' });
+
+  pairs.push({ code: 0, value: 'SECTION' });
+  pairs.push({ code: 2, value: 'ENTITIES' });
+  pairs.push(...entities);
+  pairs.push({ code: 0, value: 'ENDSEC' });
+  pairs.push({ code: 0, value: 'EOF' });
+
+  return pairs.map((p) => `${p.code}\n${p.value}`).join('\n') + '\n';
+}

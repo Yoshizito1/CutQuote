@@ -13,7 +13,9 @@ import {
   pathLength,
   pointInPolygon,
   signedArea,
+  type BendLine,
   type BoundingBox,
+  type EntityIntent,
   type Loop,
   type OpenChain,
   type ParsedDrawing,
@@ -37,23 +39,75 @@ export interface AnalyzeOptions {
 
 export const DEFAULT_GAP_TOLERANCE = 0.05; // mm
 
+/**
+ * Linetypes que, por convenção de desenho técnico, indicam linha auxiliar e
+ * não trajetória de corte: eixo/centro, oculta, fantasma e tracejadas em geral.
+ *
+ * O padrão cobre as variantes numeradas do AutoCAD (CENTER2, CENTERX2,
+ * DASHED2, HIDDENX2...) sem precisar listar todas.
+ */
+const CONSTRUCTION_LINETYPE = /CENTER|CENTRO|DASH|TRACEJAD|HIDDEN|OCULT|PHANTOM|FANTASM|DIVIDE|DOT/i;
+
+/** Continuous (ou vazio) é o único linetype que representa corte real. */
+export function isConstructionLinetype(linetype: string): boolean {
+  const value = linetype.trim();
+  if (value === '') return false;
+  if (/^(CONTINUOUS|SOLID|BYLAYER|BYBLOCK)$/i.test(value)) return false;
+  return CONSTRUCTION_LINETYPE.test(value);
+}
+
+/**
+ * Decide a intenção de cada entidade antes de qualquer medição.
+ *
+ * A ordem importa: o layer manda mais que o linetype. Quem desenha a dobra num
+ * layer DOBRA usando traço-ponto (que é a convenção de desenho para linha de
+ * dobra) espera que ela seja tratada como dobra, não descartada como eixo.
+ */
+export function classifyEntity(
+  polyline: Polyline,
+  roles: { etchLayers: ReadonlySet<string>; bendLayers: ReadonlySet<string> },
+): EntityIntent {
+  const layer = polyline.layer.toLowerCase();
+  if (roles.bendLayers.has(layer)) return 'dobra';
+  if (roles.etchLayers.has(layer)) return 'gravacao';
+  if (isConstructionLinetype(polyline.linetype)) return 'construcao';
+  return 'corte';
+}
+
 export function analyzeDrawing(drawing: ParsedDrawing, options: AnalyzeOptions = {}): PartGeometry {
   const tolerance = options.gapTolerance ?? DEFAULT_GAP_TOLERANCE;
-  const etchLayers = new Set((options.etchLayers ?? []).map((layer) => layer.toLowerCase()));
-  const bendLayers = new Set((options.bendLayers ?? []).map((layer) => layer.toLowerCase()));
+  const roles = {
+    etchLayers: new Set((options.etchLayers ?? []).map((layer) => layer.toLowerCase())),
+    bendLayers: new Set((options.bendLayers ?? []).map((layer) => layer.toLowerCase())),
+  };
 
-  const isEtch = (layer: string): boolean => etchLayers.has(layer.toLowerCase());
-  const isBend = (layer: string): boolean => bendLayers.has(layer.toLowerCase());
+  // Uma única passada de classificação. Tudo que vem depois — encadeamento,
+  // detecção de contorno aberto, preço — opera só sobre o que é corte.
+  const cutPolylines: Polyline[] = [];
+  const etchPolylines: Polyline[] = [];
+  const constructionLines: Polyline[] = [];
+  const bendLines: BendLine[] = [];
 
-  const cutPolylines = drawing.polylines.filter((p) => !isEtch(p.layer) && !isBend(p.layer));
-  const etchPolylines = drawing.polylines.filter((p) => isEtch(p.layer));
-  const bendLines = drawing.polylines
-    .filter((p) => isBend(p.layer))
-    .map((p) => ({
-      points: p.points,
-      layer: p.layer,
-      length: pathLength(p.points, p.closed),
-    }));
+  for (const polyline of drawing.polylines) {
+    switch (classifyEntity(polyline, roles)) {
+      case 'dobra':
+        bendLines.push({
+          points: polyline.points,
+          layer: polyline.layer,
+          length: pathLength(polyline.points, polyline.closed),
+        });
+        break;
+      case 'gravacao':
+        etchPolylines.push(polyline);
+        break;
+      case 'construcao':
+        constructionLines.push(polyline);
+        break;
+      default:
+        cutPolylines.push(polyline);
+        break;
+    }
+  }
 
   const { closedRings, openChains } = chainPolylines(cutPolylines, tolerance);
   const loops = buildLoops(closedRings);
@@ -86,6 +140,10 @@ export function analyzeDrawing(drawing: ParsedDrawing, options: AnalyzeOptions =
     ...openChains.map((chain) => bboxFromPoints(chain.points)),
     ...etchPolylines.map((polyline) => bboxFromPoints(polyline.points)),
     ...bendLines.map((bend) => bboxFromPoints(bend.points)),
+    // Linhas de construção NÃO entram aqui de propósito. Por convenção de
+    // desenho técnico o eixo ultrapassa o contorno da peça, e esta caixa é o
+    // que define a área aninhada em pricing.ts — incluí-las cobraria chapa a
+    // mais. A pré-visualização calcula o próprio enquadramento.
   ];
   const bbox =
     allBoxes.length > 0
@@ -99,6 +157,7 @@ export function analyzeDrawing(drawing: ParsedDrawing, options: AnalyzeOptions =
     openChains,
     bendLines,
     etchLines: etchPolylines,
+    constructionLines,
     bbox,
     cutLength,
     etchLength,

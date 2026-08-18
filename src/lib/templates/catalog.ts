@@ -22,7 +22,7 @@ import type { PartTemplate, ParamValues, TemplateBuildResult } from './types';
 
 /** Converte anéis em polilinhas fechadas de um layer. */
 function rings(list: readonly (readonly { x: number; y: number }[])[], layer = 'CORTE'): Polyline[] {
-  return list.map((points) => ({ points: [...points], closed: true, layer }));
+  return list.map((points) => ({ points: [...points], closed: true, layer, linetype: 'CONTINUOUS' }));
 }
 
 function ok(polylines: Polyline[], notes: string[] = [], suggestedThicknessMm?: number): TemplateBuildResult {
@@ -243,6 +243,7 @@ const cantoneira: PartTemplate = {
         { x: posicaoDobra, y: largura },
       ],
       closed: false,
+      linetype: 'CONTINUOUS',
       layer: 'DOBRA',
     });
 
@@ -527,6 +528,7 @@ const perfilU: PartTemplate = {
           { x, y: comprimento },
         ],
         closed: false,
+        linetype: 'CONTINUOUS',
         layer: 'DOBRA',
       });
     }

@@ -151,6 +151,8 @@ export function parseSvg(text: string, options: SvgParseOptions = {}): ParsedDra
           return { x: t.x * scale, y: -t.y * scale };
         }),
         closed,
+        // SVG não tem linetype: toda geometria desenhada é corte.
+        linetype: 'CONTINUOUS',
         layer: currentLayer,
       });
     };

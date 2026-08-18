@@ -81,6 +81,7 @@
   --geo-bend: oklch(0.65 0.18 300);
   --geo-etch: oklch(0.68 0.13 180);
   --geo-open: oklch(0.577 0.225 27);
+  --geo-construction: oklch(0.68 0.008 250);
   --geo-fill: oklch(0.72 0.17 62 / 12%);
   --geo-grid: oklch(0.9 0.006 250);
 
@@ -127,6 +128,7 @@
   --geo-bend: oklch(0.75 0.17 300);
   --geo-etch: oklch(0.75 0.12 180);
   --geo-open: oklch(0.68 0.19 25);
+  --geo-construction: oklch(0.55 0.01 250);
   --geo-fill: oklch(0.78 0.16 65 / 14%);
   --geo-grid: oklch(1 0 0 / 8%);
 
@@ -153,6 +155,7 @@
   --color-geo-bend: var(--geo-bend);
   --color-geo-etch: var(--geo-etch);
   --color-geo-open: var(--geo-open);
+  --color-geo-construction: var(--geo-construction);
   --color-geo-fill: var(--geo-fill);
   --color-geo-grid: var(--geo-grid);
 }

@@ -11,6 +11,15 @@ export interface Point {
   y: number;
 }
 
+/**
+ * Intenção de uma entidade do desenho.
+ *
+ * Um DXF mistura, no mesmo arquivo, o que deve ser cortado e o que existe só
+ * para orientar quem lê o desenho. Classificar antes de medir é o que evita
+ * cobrar (ou bloquear a peça por causa de) uma linha de centro.
+ */
+export type EntityIntent = 'corte' | 'dobra' | 'gravacao' | 'construcao';
+
 /** Polilinha já achatada (curvas convertidas em segmentos retos). */
 export interface Polyline {
   points: Point[];
@@ -18,6 +27,11 @@ export interface Polyline {
   closed: boolean;
   /** Layer de origem no CAD — usado para separar corte de gravação. */
   layer: string;
+  /**
+   * Linetype já resolvido: BYLAYER virou o linetype do layer e BYBLOCK virou o
+   * do INSERT. String vazia equivale a Continuous.
+   */
+  linetype: string;
 }
 
 /** Contorno fechado após o encadeamento das polilinhas soltas. */
@@ -82,6 +96,12 @@ export interface PartGeometry {
   bendLines: BendLine[];
   /** Trajetórias de gravação, já separadas do corte. */
   etchLines: Polyline[];
+  /**
+   * Linhas de construção (centro, oculta, fantasma). Não são cortadas nem
+   * cobradas, mas ficam registradas: sumir com geometria em silêncio faria o
+   * cliente receber uma peça sem um recorte que ele desenhou.
+   */
+  constructionLines: Polyline[];
   bbox: BoundingBox;
   /** Comprimento total a cortar (contornos + furos), em mm. */
   cutLength: number;

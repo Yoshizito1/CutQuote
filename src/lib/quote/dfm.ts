@@ -46,6 +46,7 @@ export function validatePart(
   checkScale(geometry, issues);
   checkBends(geometry, thickness, catalog.services.bending.maxBendLength, issues);
   checkServices(geometry, material, config, catalog, issues);
+  checkConstruction(geometry, issues);
   checkIgnoredEntities(geometry, issues);
 
   // Ordena por gravidade para o painel mostrar o que trava primeiro.
@@ -311,6 +312,36 @@ function checkServices(
       fix: 'Escolha um acabamento da lista disponível para este material.',
     });
   }
+}
+
+/**
+ * Reporta as linhas de construção que foram descartadas.
+ *
+ * Descartar geometria em silêncio é o risco real deste filtro: se alguém
+ * desenhar um rasgo de verdade em traço tracejado, a peça sairia sem o rasgo e
+ * ninguém perceberia até a entrega. Por isso o descarte é sempre informado,
+ * com o linetype que motivou a decisão e o caminho para reverter.
+ */
+function checkConstruction(geometry: PartGeometry, issues: DfmIssue[]): void {
+  if (geometry.constructionLines.length === 0) return;
+
+  const byType = new Map<string, number>();
+  for (const line of geometry.constructionLines) {
+    const key = line.linetype || 'sem linetype';
+    byType.set(key, (byType.get(key) ?? 0) + 1);
+  }
+  const summary = [...byType.entries()].map(([type, count]) => `${count}x ${type}`).join(', ');
+
+  issues.push({
+    id: 'linhas-construcao',
+    severity: 'info',
+    title: `${geometry.constructionLines.length} linha(s) de construção ignorada(s)`,
+    detail:
+      `Traço não contínuo indica linha auxiliar (eixo, oculta, fantasma) e não ` +
+      `trajetória de corte: ${summary}. Não foram cobradas nem consideradas na ` +
+      'checagem de contorno fechado.',
+    fix: 'Se alguma delas deveria ser cortada, converta para linha contínua (Continuous) no CAD.',
+  });
 }
 
 function checkIgnoredEntities(geometry: PartGeometry, issues: DfmIssue[]): void {

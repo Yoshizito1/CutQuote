@@ -6,7 +6,14 @@ import { parseSvg } from './svg';
 import type { ParsedDrawing, PartGeometry, SourceUnit } from './types';
 
 export * from './types';
-export { analyzeDrawing, minimumWebWidth, smallestHoleDimension, DEFAULT_GAP_TOLERANCE } from './analyze';
+export {
+  analyzeDrawing,
+  classifyEntity,
+  isConstructionLinetype,
+  minimumWebWidth,
+  smallestHoleDimension,
+  DEFAULT_GAP_TOLERANCE,
+} from './analyze';
 export { DEFAULT_CHORD_TOLERANCE } from './curves';
 export { parseDxfFile } from './dxf';
 export { parseSvg } from './svg';

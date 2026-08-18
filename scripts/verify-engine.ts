@@ -24,6 +24,8 @@ import {
   line,
   lwpolyline,
   rectangleAsLines,
+  lineWithLinetype,
+  buildDxfWithLayerTable,
 } from './fixtures';
 
 let passed = 0;
@@ -589,6 +591,109 @@ section('23. Todos os templates são válidos nos valores padrão');
           .join('; '),
       );
     }
+  }
+}
+
+// --- 24. Linhas de construção não são corte ---------------------------------
+section('24. Linetype de construção é separado do corte');
+{
+  // Reproduz PeçaTeste3.DXF: quadrado 60x60 Continuous + eixo CENTERX2 que
+  // atravessa a peça de borda a borda.
+  const dxf = buildDxf([
+    ...lineWithLinetype(0, 15, 60, 15, 'CENTERX2'),
+    ...lineWithLinetype(0, 0, 60, 0, 'Continuous'),
+    ...lineWithLinetype(0, 0, 0, 60, 'Continuous'),
+    ...lineWithLinetype(0, 60, 60, 60, 'Continuous'),
+    ...lineWithLinetype(60, 0, 60, 60, 'Continuous'),
+  ]);
+  const geometry = load(dxf);
+
+  check('comprimento de corte (mm)', geometry.cutLength, 240, 0.001);
+  check('área líquida (mm²)', geometry.netArea, 3600, 0.001);
+  check('perfurações', geometry.pierces, 1, 0);
+  check('contornos abertos', geometry.openChains.length, 0, 0);
+  check('linhas de construção', geometry.constructionLines.length, 1, 0);
+  checkTrue(
+    'o eixo não entra na caixa envolvente (não infla o custo de material)',
+    Math.abs(geometry.bbox.width - 60) < 1e-6 && Math.abs(geometry.bbox.height - 60) < 1e-6,
+  );
+
+  const quote = quotePart(geometry, {
+    materialId: 'aco-1020', thicknessMm: 1.5, finishId: 'nenhum',
+    quantity: 10, tappedHoles: 0, hardwareInserts: 0,
+  });
+  checkTrue('peça aprovada', quote.ok, JSON.stringify(quote.issues.map((i) => i.title)));
+  checkTrue(
+    'o descarte é reportado, não silencioso',
+    quote.issues.some((i) => i.id === 'linhas-construcao' && i.severity === 'info'),
+  );
+}
+
+// --- 25. BYLAYER: o linetype vem da camada ---------------------------------
+section('25. BYLAYER resolve pelo linetype da camada');
+{
+  // Caso típico de CAD real: a entidade não declara linetype; quem define é a
+  // camada. Sem ler a tabela LAYER, o eixo voltaria a ser cobrado como corte.
+  const dxf = buildDxfWithLayerTable(
+    [
+      { name: 'CORTE', linetype: 'Continuous' },
+      { name: 'EIXOS', linetype: 'CENTER' },
+    ],
+    [
+      ...line(0, 0, 60, 0, 'CORTE'),
+      ...line(60, 0, 60, 60, 'CORTE'),
+      ...line(60, 60, 0, 60, 'CORTE'),
+      ...line(0, 60, 0, 0, 'CORTE'),
+      // Sem código 6: herda CENTER da camada EIXOS.
+      ...line(-10, 30, 70, 30, 'EIXOS'),
+    ],
+  );
+  const geometry = load(dxf);
+
+  check('comprimento de corte (mm)', geometry.cutLength, 240, 0.001);
+  check('linhas de construção', geometry.constructionLines.length, 1, 0);
+  check('contornos abertos', geometry.openChains.length, 0, 0);
+  checkTrue(
+    'linetype resolvido para CENTER',
+    geometry.constructionLines[0]?.linetype.toUpperCase() === 'CENTER',
+    geometry.constructionLines[0]?.linetype,
+  );
+  // O eixo vai de -10 a 70, mas a caixa da peça continua 60x60.
+  check('caixa ignora o eixo que ultrapassa', geometry.bbox.width, 60, 1e-6);
+}
+
+// --- 26. Layer tem precedência sobre linetype ------------------------------
+section('26. Dobra em traço-ponto continua sendo dobra');
+{
+  // Linha de dobra é desenhada em traço-ponto por convenção. Se o linetype
+  // vencesse o layer, toda dobra viraria "construção" e sumiria da peça.
+  const dxf = buildDxf([
+    ...rectangleAsLines(100, 50),
+    ...lineWithLinetype(50, 0, 50, 50, 'CENTER', 'DOBRA'),
+  ]);
+  const geometry = load(dxf, { bendLayers: ['DOBRA'], etchLayers: [] });
+
+  check('linhas de dobra', geometry.bendLines.length, 1, 0);
+  check('linhas de construção', geometry.constructionLines.length, 0, 0);
+  check('comprimento de corte (mm)', geometry.cutLength, 300, 0.001);
+}
+
+// --- 27. Continuous e vazio nunca viram construção ------------------------
+section('27. Continuous, SOLID e linetype vazio são corte');
+{
+  for (const linetype of ['Continuous', 'CONTINUOUS', 'SOLID', '']) {
+    const dxf = buildDxf([
+      ...lineWithLinetype(0, 0, 40, 0, linetype),
+      ...lineWithLinetype(40, 0, 40, 40, linetype),
+      ...lineWithLinetype(40, 40, 0, 40, linetype),
+      ...lineWithLinetype(0, 40, 0, 0, linetype),
+    ]);
+    const geometry = load(dxf);
+    checkTrue(
+      `"${linetype || '(vazio)'}" tratado como corte`,
+      geometry.cutLength > 159 && geometry.constructionLines.length === 0,
+      `corte=${geometry.cutLength} constr=${geometry.constructionLines.length}`,
+    );
   }
 }
 

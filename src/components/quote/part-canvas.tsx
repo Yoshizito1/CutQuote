@@ -10,7 +10,15 @@
 
 import { useMemo, useState } from 'react';
 
-import type { BendLine, Loop, OpenChain, PartGeometry, Point } from '@/lib/geometry';
+import {
+  bboxFromPoints,
+  mergeBBox,
+  type BendLine,
+  type Loop,
+  type OpenChain,
+  type PartGeometry,
+  type Point,
+} from '@/lib/geometry';
 import { cn } from '@/lib/utils';
 
 interface PartCanvasProps {
@@ -33,18 +41,26 @@ export function PartCanvas({ geometry, className, showDimensions = true }: PartC
   const [hovered, setHovered] = useState<string | null>(null);
 
   const view = useMemo(() => {
-    const { bbox } = geometry;
-    const span = Math.max(bbox.width, bbox.height, 1);
+    // `geometry.bbox` cobre só o que é cortado — é ela que dita o custo de
+    // material. Para ENQUADRAR o desenho é preciso somar as linhas de
+    // construção, que por convenção ultrapassam o contorno da peça.
+    const frame = geometry.constructionLines.reduce(
+      (box, line) => mergeBBox(box, bboxFromPoints(line.points)),
+      geometry.bbox,
+    );
+
+    const span = Math.max(frame.width, frame.height, 1);
     const padding = span * 0.12;
 
     return {
       // Y é espelhado, então o topo do SVG é -maxY.
       viewBox: [
-        bbox.minX - padding,
-        -bbox.maxY - padding,
-        bbox.width + padding * 2,
-        bbox.height + padding * 2,
+        frame.minX - padding,
+        -frame.maxY - padding,
+        frame.width + padding * 2,
+        frame.height + padding * 2,
       ].join(' '),
+      frame,
       padding,
       span,
     };
@@ -85,12 +101,30 @@ export function PartCanvas({ geometry, className, showDimensions = true }: PartC
         </defs>
 
         <rect
-          x={geometry.bbox.minX - view.padding}
-          y={-geometry.bbox.maxY - view.padding}
-          width={geometry.bbox.width + view.padding * 2}
-          height={geometry.bbox.height + view.padding * 2}
+          x={view.frame.minX - view.padding}
+          y={-view.frame.maxY - view.padding}
+          width={view.frame.width + view.padding * 2}
+          height={view.frame.height + view.padding * 2}
           fill="url(#grade)"
         />
+
+        {/*
+          Construção primeiro, no fundo: é referência, não trajetória. Traço
+          fino cinza com padrão traço-ponto, a convenção de linha de eixo.
+        */}
+        {geometry.constructionLines.map((line, index) => (
+          <path
+            key={`aux-${index}`}
+            d={toPath(line.points, line.closed)}
+            fill="none"
+            stroke="var(--geo-construction)"
+            strokeWidth={1}
+            strokeDasharray="10 3 2 3"
+            vectorEffect="non-scaling-stroke"
+          >
+            <title>Linha de construção ({line.linetype}) — não cortada, não cobrada</title>
+          </path>
+        ))}
 
         {/* Corpo da peça */}
         {fillPath && <path d={fillPath} fill="var(--geo-fill)" fillRule="evenodd" />}
@@ -285,6 +319,11 @@ export function CanvasLegend({ geometry }: { geometry: PartGeometry }) {
     { color: 'var(--geo-bend)', label: 'Dobra', show: geometry.bendLines.length > 0 },
     { color: 'var(--geo-etch)', label: 'Gravação', show: geometry.etchLength > 0 },
     { color: 'var(--geo-open)', label: 'Contorno aberto', show: geometry.openChains.length > 0 },
+    {
+      color: 'var(--geo-construction)',
+      label: 'Construção (não cobrada)',
+      show: geometry.constructionLines.length > 0,
+    },
   ].filter((item) => item.show);
 
   if (items.length === 0) return null;
